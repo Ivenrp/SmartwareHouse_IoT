@@ -16,6 +16,6 @@
 | 2  | Ghozi Itmam Aldani | [NIM 2] |
 | 3  | Yogi Ferdiansyah | [NIM 3] |
 | 4  | Alma Maida Wirastuti | H1H024021 |
-| 5  | [Nama Anggota 5] | [NIM 5] |
+| 5  | Mohammad Zulfan Ramadhan | H1H024008 |
 
 ## Deskripsi Proyek
