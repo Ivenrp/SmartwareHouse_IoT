@@ -52,7 +52,3 @@ backend/     backend Golang
 dashboard/   tampilan web
 docs/        dokumen progress dan desain
 ```
-
-## Dokumen
-
-- [File progress (PDF)](docs/progress-tugas-besar-iot-1.pdf)
