@@ -1,6 +1,6 @@
 # Smart Warehouse
 
-Tugas Besar 1 - Sistem Internet of Things (Praktikum IoT TK)
+Tugas Besar - Sistem Internet of Things (Praktikum IoT TK)
 
 Miniatur gudang dengan lift otomatis 4 level. Barang di-scan lewat QR code, ditimbang, lalu dibawa lift ke rak tujuan. Posisi, berat, dan status lift bisa dipantau lewat dashboard web.
 
