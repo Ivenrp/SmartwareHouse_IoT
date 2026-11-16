@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Lift Gudang</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.10.1/mqtt.min.js"></script>
+<style>
+:root{
+  --bg:#e4e7ea; --panel:#f7f8f9; --line:#c3c9ce; --ink:#17212b; --steel:#5b6770;
+  --orange:#d9480f; --green:#12805c; --red:#c92a2a; --amber:#a86a00; --shaft:#1f2a35;
+  --display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#12181f;--panel:#1b242d;--line:#33414d;--ink:#e8edf1;--steel:#93a1ad;--orange:#ff8a4c;--green:#3ecf9a;--red:#ff6b6b;--amber:#f0b44c;--shaft:#0c1116;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.45 var(--body)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{margin:0;font:700 26px/1 var(--display);letter-spacing:.01em}
+h2{margin:0 0 12px;font:600 18px/1.1 var(--display)}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;font-weight:500;font-size:14px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--steel)}
+.pill.ok .dot{background:var(--green)} .pill.bad .dot{background:var(--red)}
+#alert{display:none;margin:16px 24px 0;padding:12px 16px;border-left:6px solid var(--red);background:var(--panel);font-weight:600}
+#alert.show{display:block}
+#alert.blink{animation:blink 1s steps(2,start) infinite}
+@keyframes blink{50%{background:color-mix(in srgb,var(--red) 18%,var(--panel))}}
+main{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:16px 24px 32px;max-width:1180px;margin:0 auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));align-content:start}
+.wide{grid-column:1/-1}
+
+/* Poros lift: elemen utama */
+.shaft-card{display:flex;flex-direction:column}
+.shaft{position:relative;height:360px;background:var(--shaft);border-radius:4px;margin:4px 0 12px;overflow:hidden}
+.floor{position:absolute;left:0;right:0;height:0;border-top:2px dashed #5b6770}
+.floor span{position:absolute;right:8px;top:4px;font:600 13px var(--display);color:#aab5bf}
+#f2{top:34px} #f1{bottom:34px}
+.rail{position:absolute;top:0;bottom:0;width:6px;background:#2f3d4b}
+.rail.l{left:18px}.rail.r{right:18px}
+.slots{position:absolute;left:40px;right:40px;top:2px;height:30px;display:flex;gap:4px}
+.slot{flex:1;border:1px solid #5b6770;border-radius:2px}
+.slot.full{background:var(--orange);border-color:var(--orange)}
+#platform{position:absolute;left:34px;right:34px;height:14px;background:#cbd3da;border-radius:2px;transition:top .6s ease;box-shadow:0 2px 0 #7b8791}
+#platform.moving{background:var(--green)}
+#platform.halt{background:var(--red)}
+#cargo{position:absolute;left:50%;bottom:14px;width:46px;height:34px;margin-left:-23px;background:var(--orange);border-radius:2px;display:none}
+#cargo.on{display:block}
+.legend{font-size:13px;color:var(--steel)}
+
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0}
+.kv dt{color:var(--steel)} .kv dd{margin:0;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.big{font:700 44px/1 var(--display);font-variant-numeric:tabular-nums}
+.big small{font:500 16px var(--body);color:var(--steel);margin-left:4px}
+.bar{height:10px;background:var(--line);border-radius:5px;overflow:hidden;margin:10px 0 6px}
+.bar i{display:block;height:100%;width:0;background:var(--green);transition:width .4s}
+.bar i.over{background:var(--red)}
+
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--bg);padding:9px 14px;border-radius:5px;font-weight:600}
+button:hover:not(:disabled){border-color:var(--ink)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+button.stop{background:var(--red);border-color:var(--red);color:#fff;font:700 20px var(--display);padding:14px 22px;letter-spacing:.02em}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
+input[type=number]{width:90px;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--bg)}
+label.chk{display:inline-flex;gap:6px;align-items:center;color:var(--steel)}
+
+#log{margin:0;padding:0;list-style:none;max-height:220px;overflow:auto;font-size:13px;font-variant-numeric:tabular-nums}
+#log li{padding:5px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:64px 1fr;gap:8px}
+#log .t{color:var(--steel)} #log .rej{color:var(--red);font-weight:600} #log .okk{color:var(--green);font-weight:600}
+.empty{color:var(--steel)}
+
+@media (max-width:860px){
+  main{grid-template-columns:1fr;padding:12px}
+  header{padding:12px}
+  #alert{margin:12px 12px 0}
+  .shaft{height:300px}
+}
+@media (prefers-reduced-motion:reduce){#platform{transition:none}#alert.blink{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lift Gudang SMART-WH-LIFT-01</h1>
+  <div class="pills">
+    <span class="pill" id="pBroker"><span class="dot"></span><span>Broker: terputus</span></span>
+    <span class="pill" id="pDevice"><span class="dot"></span><span>Perangkat: tidak diketahui</span></span>
+  </div>
+</header>
+
+<div id="alert" role="alert"></div>
+
+<main>
+  <section class="card shaft-card" aria-label="Posisi lift">
+    <h2>Posisi lift</h2>
+    <div class="shaft" id="shaft">
+      <div class="rail l"></div><div class="rail r"></div>
+      <div class="slots" id="slots"></div>
+      <div class="floor" id="f2"><span>Lantai 2</span></div>
+      <div class="floor" id="f1"><span>Lantai 1</span></div>
+      <div id="platform"><div id="cargo"></div></div>
+    </div>
+    <div class="legend">Kotak oranye di atas: slot terisi di Lantai 2. Posisi platform dihitung dari Ultrasonik 2.</div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Status</h2>
+      <dl class="kv">
+        <dt>Lantai saat ini</dt><dd id="vFloor">-</dd>
+        <dt>Posisi</dt><dd id="vPos">-</dd>
+        <dt>Sejajar lantai</dt><dd id="vAlign">-</dd>
+        <dt>Jarak Ultrasonik 2</dt><dd id="vU2">-</dd>
+        <dt>Motor</dt><dd id="vMotor">-</dd>
+        <dt>Sisa langkah</dt><dd id="vSteps">-</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Beban di platform</h2>
+      <div class="big"><span id="vWeight">0</span><small>gram</small></div>
+      <div class="bar"><i id="wBar"></i></div>
+      <dl class="kv">
+        <dt>Batas beban</dt><dd id="vMax">3000 g</dd>
+        <dt>Barang terdeteksi (U1)</dt><dd id="vItem">-</dd>
+        <dt>Jarak Ultrasonik 1</dt><dd id="vU1">-</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Stok Lantai 2</h2>
+      <div class="big"><span id="vStock">0</span><small>unit tercatat</small></div>
+      <dl class="kv" style="margin-top:10px">
+        <dt>Slot kosong</dt><dd id="vSlots">-</dd>
+        <dt>Penyimpanan</dt><dd id="vStorage">-</dd>
+        <dt>Jarak Ultrasonik 3</dt><dd id="vU3">-</dd>
+      </dl>
+      <div class="row">
+        <button data-stock="1">Tambah 1</button>
+        <button data-stock="-1">Kurangi 1</button>
+        <button id="bStockReset">Reset stok</button>
+      </div>
+    </section>
+
+    <section class="card wide">
+      <h2>Kendali</h2>
+      <div class="btns">
+        <button class="stop" id="bStop">EMERGENCY STOP</button>
+        <button id="bReset">Reset alarm</button>
+        <button class="primary" id="bUp">Naik ke Lantai 2</button>
+        <button class="primary" id="bDown">Turun ke Lantai 1</button>
+        <button id="bTare">Tare load cell</button>
+        <button id="bRead">Baca sensor sekarang</button>
+      </div>
+      <div class="row">
+        <span>Mode</span>
+        <div class="seg" role="group" aria-label="Mode operasi">
+          <button id="mAuto" aria-pressed="true">Otomatis</button>
+          <button id="mMan" aria-pressed="false">Manual</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="force"> Naik walau Lantai 2 penuh</label>
+      </div>
+      <div class="row">
+        <span>Jog motor</span>
+        <input type="number" id="steps" value="200" min="1" max="3000" aria-label="Jumlah langkah jog">
+        <span class="legend">langkah</span>
+        <button id="bJogUp">Jog naik</button>
+        <button id="bJogDown">Jog turun</button>
+      </div>
+    </section>
+
+    <section class="card wide">
+      <h2>Log perintah</h2>
+      <ul id="log"><li class="empty"><span></span><span>Belum ada perintah dikirim.</span></li></ul>
+    </section>
+  </div>
+</main>
+
+<script>
+// ===== Konfigurasi: samakan dengan sketch .ino =====
+const BROKER_WS = "wss://broker.hivemq.com:8884/mqtt";
+const T = {
+  telemetry: "warehouse/lift-01/telemetry",
+  command:   "warehouse/lift-01/command",
+  ack:       "warehouse/lift-01/ack",
+  status:    "warehouse/lift-01/status"
+};
+const U2_FLOOR2 = 6.0, U2_FLOOR1 = 45.0;   // cm, sama dengan DIST_U2_FLOOR_*_CM
+
+const $ = id => document.getElementById(id);
+let client = null, connected = false, deviceOnline = false, mode = "AUTO";
+let emergency = false;
+const pending = {};
+
+const ALERTS = {
+  EMERGENCY_STOP_TRIGGERED: "Emergency stop aktif. Motor berhenti. Tekan Reset alarm setelah area aman.",
+  ERR_ALIGNMENT_TIMEOUT: "Lift tidak menemukan Lantai 2 sebelum batas langkah. Periksa sensor Ultrasonik 2 dan arah motor.",
+  ERR_HOME_ALIGNMENT_TIMEOUT: "Lift tidak menemukan Lantai 1 sebelum batas langkah. Periksa sensor Ultrasonik 2 dan arah motor.",
+  ERR_OVERWEIGHT: "Beban melebihi 3 kg. Angkat sebagian barang dari platform.",
+  ERR_FLOOR_2_FULL: "Lantai 2 penuh. Kosongkan rak atau naik dengan opsi paksa."
+};
+const POS = {
+  FLOOR_1:"Lantai 1", FLOOR_2:"Lantai 2", MOVING_TO_FLOOR_2:"Bergerak naik", MOVING_TO_FLOOR_1:"Bergerak turun",
+  MID_TRANSIT_STOPPED:"Berhenti di tengah", JOG_UP:"Jog naik", JOG_DOWN:"Jog turun"
+};
+
+function setPill(el, ok, text){ el.className = "pill " + (ok ? "ok" : "bad"); el.lastElementChild.textContent = text; }
+function fmt(n, d=1){ return (typeof n === "number") ? n.toFixed(d) : "-"; }
+function yn(b){ return b ? "Ya" : "Tidak"; }
+
+// Slot Lantai 2
+const slotsEl = $("slots");
+function drawSlots(max, empty){
+  const filled = Math.max(0, max - empty);
+  slotsEl.innerHTML = "";
+  for(let i=0;i<max;i++){ const d=document.createElement("div"); d.className="slot"+(i<filled?" full":""); slotsEl.appendChild(d); }
+}
+drawSlots(4, 4);
+
+function placePlatform(u2, posStatus){
+  const shaft = $("shaft"), p = $("platform");
+  const top = 34, bottom = shaft.clientHeight - 34 - p.offsetHeight;
+  let pct = (u2 - U2_FLOOR2) / (U2_FLOOR1 - U2_FLOOR2);
+  pct = Math.min(1, Math.max(0, isNaN(pct) ? 1 : pct));
+  p.style.top = (top + pct * (bottom - top)) + "px";
+  p.className = emergency ? "halt" : (/MOVING|JOG/.test(posStatus) ? "moving" : "");
+}
+
+function render(d){
+  const l = d.lift_state || {}, s = d.stock_management || {}, c = d.cargo_sensor || {};
+  mode = d.operation_mode || mode;
+  emergency = ["EMERGENCY_STOP_TRIGGERED","ERR_ALIGNMENT_TIMEOUT","ERR_HOME_ALIGNMENT_TIMEOUT"].includes(d.active_alert);
+
+  $("vFloor").textContent = l.current_floor ?? "-";
+  $("vPos").textContent = POS[l.position_status] || l.position_status || "-";
+  $("vAlign").textContent = yn(l.is_aligned);
+  $("vU2").textContent = fmt(l.ultrasonic_2_distance_cm) + " cm";
+  $("vMotor").textContent = l.motor_enabled ? "Aktif" : "Mati";
+  $("vSteps").textContent = l.stepper_steps_remaining ?? "-";
+
+  const w = c.weight_grams ?? 0, mx = c.max_weight_limit_grams || 3000;
+  $("vWeight").textContent = fmt(w);
+  $("vMax").textContent = mx + " g";
+  $("wBar").style.width = Math.min(100, w / mx * 100) + "%";
+  $("wBar").className = c.is_overweight ? "over" : "";
+  $("vItem").textContent = yn(c.item_on_lift_u1);
+  $("vU1").textContent = fmt(c.ultrasonic_1_distance_cm) + " cm";
+  $("cargo").className = c.item_on_lift_u1 ? "on" : "";
+
+  $("vStock").textContent = s.current_stock_count ?? 0;
+  $("vSlots").textContent = (s.remaining_empty_slots ?? "-") + " dari " + (s.max_capacity_slots ?? "-");
+  $("vStorage").textContent = s.storage_status === "FULL" ? "Penuh" : (s.storage_status === "AVAILABLE" ? "Tersedia" : "-");
+  $("vU3").textContent = fmt(s.ultrasonic_3_distance_cm) + " cm";
+  if (s.max_capacity_slots) drawSlots(s.max_capacity_slots, s.remaining_empty_slots);
+
+  placePlatform(l.ultrasonic_2_distance_cm, l.position_status);
+
+  const a = $("alert");
+  if (d.active_alert){
+    a.textContent = ALERTS[d.active_alert] || d.active_alert;
+    a.className = "show" + (emergency ? " blink" : "");
+  } else { a.className = ""; }
+
+  $("mAuto").setAttribute("aria-pressed", mode === "AUTO");
+  $("mMan").setAttribute("aria-pressed", mode === "MANUAL");
+}
+
+// ===== Log =====
+function addLog(text, cls){
+  const ul = $("log");
+  if (ul.firstElementChild && ul.firstElementChild.classList.contains("empty")) ul.innerHTML = "";
+  const li = document.createElement("li");
+  const t = new Date().toLocaleTimeString("id-ID");
+  li.innerHTML = '<span class="t"></span><span></span>';
+  li.children[0].textContent = t;
+  li.children[1].textContent = text;
+  if (cls) li.children[1].className = cls;
+  ul.prepend(li);
+  while (ul.children.length > 60) ul.lastElementChild.remove();
+}
+
+// ===== MQTT =====
+function setControls(){
+  document.querySelectorAll("button, #force, #steps").forEach(el => {
+    el.disabled = !(connected);
+  });
+}
+function connect(){
+  client = mqtt.connect(BROKER_WS, { clientId: "dash-" + Math.random().toString(16).slice(2,10), reconnectPeriod: 3000, connectTimeout: 8000 });
+  client.on("connect", () => {
+    connected = true; setPill($("pBroker"), true, "Broker: terhubung"); setControls();
+    client.subscribe([T.telemetry, T.ack, T.status]);
+  });
+  const down = () => { connected = false; setPill($("pBroker"), false, "Broker: terputus"); setControls(); };
+  client.on("close", down); client.on("offline", down);
+  client.on("error", e => addLog("Kesalahan MQTT: " + e.message, "rej"));
+  client.on("message", (topic, payload) => {
+    let d; try { d = JSON.parse(payload.toString()); } catch { return; }
+    if (topic === T.telemetry) render(d);
+    else if (topic === T.status){ deviceOnline = d.status === "ONLINE"; setPill($("pDevice"), deviceOnline, "Perangkat: " + (deviceOnline ? "online" : "offline")); }
+    else if (topic === T.ack){
+      const name = pending[d.command_id] || d.command_id; delete pending[d.command_id];
+      const ok = d.status === "EXECUTED";
+      addLog((ok ? "Berhasil: " : "Ditolak: ") + name + ". " + d.message, ok ? "okk" : "rej");
+    }
+  });
+}
+function send(action, payload, label){
+  if (!connected) return;
+  const id = "CMD-" + Date.now();
+  pending[id] = label || action;
+  client.publish(T.command, JSON.stringify({ command_id: id, action, payload: payload || {} }), { qos: 1 });
+  addLog("Dikirim: " + (label || action));
+}
+
+$("bStop").onclick = () => send("CMD_EMERGENCY_STOP", {}, "Emergency stop");
+$("bReset").onclick = () => send("CMD_RESET_ALARM", {}, "Reset alarm");
+$("bUp").onclick = () => send("CMD_MOVE_FLOOR_2", { force_override: $("force").checked }, "Naik ke Lantai 2");
+$("bDown").onclick = () => send("CMD_MOVE_FLOOR_1", {}, "Turun ke Lantai 1");
+$("bTare").onclick = () => send("CMD_TARE_LOADCELL", {}, "Tare load cell");
+$("bRead").onclick = () => send("CMD_READ_SENSORS_NOW", {}, "Baca sensor sekarang");
+$("mAuto").onclick = () => send("CMD_SET_MODE", { mode: "AUTO" }, "Mode otomatis");
+$("mMan").onclick = () => send("CMD_SET_MODE", { mode: "MANUAL" }, "Mode manual");
+const jogSteps = () => Math.min(3000, Math.max(1, parseInt($("steps").value) || 200));
+$("bJogUp").onclick = () => send("CMD_JOG", { direction: "UP", steps: jogSteps() }, "Jog naik");
+$("bJogDown").onclick = () => send("CMD_JOG", { direction: "DOWN", steps: jogSteps() }, "Jog turun");
+document.querySelectorAll("[data-stock]").forEach(b => b.onclick = () => send("CMD_UPDATE_STOCK", { delta: parseInt(b.dataset.stock) }, "Ubah stok " + b.dataset.stock));
+$("bStockReset").onclick = () => { if (confirm("Reset stok ke 0?")) send("CMD_UPDATE_STOCK", { reset: true }, "Reset stok"); };
+
+setPill($("pBroker"), false, "Broker: terputus");
+setPill($("pDevice"), false, "Perangkat: tidak diketahui");
+setControls();
+placePlatform(U2_FLOOR1, "FLOOR_1");
+window.addEventListener("resize", () => placePlatform(U2_FLOOR1, "FLOOR_1"));
+connect();
+</script>
+</body>
+</html>
