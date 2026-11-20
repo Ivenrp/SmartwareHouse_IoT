@@ -1,0 +1,10 @@
+*.zip
+*.docx
+*.exe
+/ui/
+laravel-ui-smart-warehouse/
+/jalankan-backend.bat
+/setup-smart-warehouse.bat
+warehouse-ui/vendor/
+warehouse-ui/node_modules/
+warehouse-ui/.env
